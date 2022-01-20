@@ -1,0 +1,145 @@
+#!/bin/bash
+
+# If the current directory belongs to an Azure DevOps Git repository it is opened in the browser.
+# Similar to the VS Code Ǵit Lens's "Open Repository on Remote" command
+# TODO: 
+
+
+
+
+
+usage() {
+  cat <<EOF
+Usage: $(basename "${BASH_SOURCE[0]}") [-h] [FILE]
+Opens the FILE of a Git repo (or the root of the repo if no file is given) "remotely" in the browser.
+
+Available options:
+
+-h, --help      Print this help and exit
+
+EOF
+# -v, --verbose   Print script debug info
+# -f, --flag      Some flag description
+# -p, --param     Some param description
+  exit
+}
+
+
+parse_params() {
+  # default values of variables set from params
+  flag=0
+  param=''
+
+  while :; do
+    case "${1-}" in
+    -h | --help) usage ;;
+    # -v | --verbose) set -x ;;
+    # --no-color) NO_COLOR=1 ;;
+    # -f | --flag) flag=1 ;; # example flag
+    # -p | --param) # example named parameter
+    #   param="${2-}"
+    #   shift
+    #   ;;
+    # -?*) die "Unknown option: $1" ;;
+    *) break ;;
+    esac
+    shift
+  done
+
+  args=("$@")
+
+  # check required params and arguments
+#   [[ -z "${param-}" ]] && die "Missing required parameter: param"
+#   [[ ${#args[@]} -eq 0 ]] && die "Missing script arguments"
+
+  return 0
+}
+
+function assertGitRepo() {
+    git_dir="$1"
+    git -C "$git_dir" status &> /dev/null
+    if [ $? -ne 0 ]; then
+        echo "'$1' is not in a Git repo"
+        exit 1;
+fi
+}
+
+parse_params "$@"
+
+
+file_param=
+
+repo_open_dir=
+repo_open_file=
+repo_root_dir=
+
+
+
+# file_param="$(realpath ${args[0]})"
+file_param="${args[0]}"
+
+if [ -n "$file_param" ]; then
+    file_param="$(realpath "$file_param")"
+    if [ -f $file_param ]; then
+        # FILE is a file
+        repo_open_dir=$(dirname "$file_param")
+        repo_open_file=$(basename "$file_param")
+    elif [ -d $file_param ]; then
+        # FILE is a directory
+        repo_open_dir="$file_param"
+    else
+        echo >&2 -e "'$file_param' is not a file or directory"
+        exit 1
+    fi
+else 
+    # no FILE specified
+    file_param="$PWD"
+    repo_open_dir=$(realpath "$file_param")
+fi
+
+    assertGitRepo "$repo_open_dir"
+
+
+
+echo "Repo open dir: '${repo_open_dir}'"
+echo "Repo open file: '${repo_open_file}'"
+
+repo_root_dir=$(git -C "$repo_open_dir" rev-parse --show-toplevel)
+echo "Repo root path: '${repo_root_dir}'"
+
+repo_open_dir_relative=$(realpath $repo_open_dir --relative-to="$repo_root_dir")
+echo "Repo open dir (relative): '$repo_open_dir_relative'"
+
+# Find out remote origin URL
+repo_origin=$(git -C "$repo_root_dir" config --get remote.origin.url)
+
+# Split repo origin URL into repo-specific pieces, depending on type of remote system (Azure DevOps or GitHub)
+if [[ $repo_origin == *"dev.azure.com"* ]]; then
+    organization=$(echo "$repo_origin" | sed -r 's/.*\/(.*)\/.*\/.*$/\1/')
+    project=$(echo "$repo_origin" | sed -r 's/.*\/.*\/(.*)\/.*$/\1/')
+    repo=$(echo "$repo_origin" | sed -r 's/.*\/.*\/.*\/(.*)$/\1/')
+    remote_url="https://dev.azure.com/$organization/$project/_git/$repo"
+
+elif [[ $repo_origin == *"github.com"* ]]; then
+    # https://github.com/conterra/mapapps-4-developers.git
+    # git@github.com:conterra/mapapps-4-developers.git
+    organization=$(echo "$repo_origin" | sed -r 's/.*\/(.*)\/(.*)\.git$/\1/')
+    repo=$(echo "$repo_origin" | sed -r 's/.*\/(.*)\/(.*)\.git$/\2/')
+    remote_url="https://github.com/$organization/$repo"
+else 
+    echo "It's an unknown Git type"
+    exit 1
+fi
+
+echo "Remote URL: $remote_url"
+
+exit 0;
+
+repodata_line=$(grep remote\ \"origin\" -A 1 .git/config | sed -e "1d")
+# organization=$(echo "$repodata_line" | sed 's/.*\/\(.*\)\/\(.*\)\/\(.*\)$/\1 - \2 - \3/')
+organization=$(echo "$repodata_line" | sed 's/.*\/\(.*\)\/\(.*\)\/\(.*\)$/\1/')
+project=$(echo "$repodata_line" | sed 's/.*\/\(.*\)\/\(.*\)\/\(.*\)$/\2/')
+repo=$(echo "$repodata_line" | sed 's/.*\/\(.*\)\/\(.*\)\/\(.*\)$/\3/')
+echo "$repodata_line"
+echo "$organization"
+xdg-open "https://dev.azure.com/"$organization"/"$project"/_git/"$repo""
