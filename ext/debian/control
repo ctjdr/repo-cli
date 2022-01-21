@@ -1,0 +1,10 @@
+Package: repo-cli
+Version: 1.0.0-1
+Section: devel
+Priority: optional
+Architecture: all
+Depends: git, xdg-utils
+Maintainer: JDR <jdconterra@gmail.com>
+Homepage: https://github.com/ctjdr/repo-cli
+Description: Git Remote Repo Opener
+ Open your Git repository on Azure DevOps or GitHub from the command line

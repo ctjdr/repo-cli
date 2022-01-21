@@ -4,87 +4,143 @@
 # Similar to the VS Code Ǵit Lens's "Open Repository on Remote" command
 # TODO: 
 
-
-
-
+set -e
 
 usage() {
   cat <<EOF
-Usage: $(basename "${BASH_SOURCE[0]}") [-h] [FILE]
-Opens the FILE of a Git repo (or the root of the repo if no file is given) "remotely" in the browser.
+Usage: $(basename "${BASH_SOURCE[0]}") [-h] [-v] [ FILE | - ]
+Opens the FILE of a Git repo (or the root of the repo if no file is given) "remotely" in your default browser.
+If "-" is used as a FILE, the first line of stdin is read and used as FILE.
 
 Available options:
 
--h, --help      Print this help and exit
+-h, --help        Print this help and exit
+-v, --verbose     Print diagnostic messages
+
+-y, --history     Open the history view for FILE
+-p, --print-only  Only print the URL that would be opened in a browser
 
 EOF
-# -v, --verbose   Print script debug info
-# -f, --flag      Some flag description
-# -p, --param     Some param description
   exit
 }
 
-
 parse_params() {
-  # default values of variables set from params
-  flag=0
-  param=''
 
   while :; do
     case "${1-}" in
     -h | --help) usage ;;
-    # -v | --verbose) set -x ;;
-    # --no-color) NO_COLOR=1 ;;
-    # -f | --flag) flag=1 ;; # example flag
-    # -p | --param) # example named parameter
-    #   param="${2-}"
-    #   shift
-    #   ;;
-    # -?*) die "Unknown option: $1" ;;
+    -v | --verbose) verbose=1 ;;
+    -p | --print-only) print_only=1 ;;
+    -y | --history) open_history=1 ;;
+     -?*) echo "Unknown option: $1"; exit 1 ;;
     *) break ;;
     esac
     shift
   done
 
   args=("$@")
-
-  # check required params and arguments
-#   [[ -z "${param-}" ]] && die "Missing required parameter: param"
-#   [[ ${#args[@]} -eq 0 ]] && die "Missing script arguments"
-
   return 0
+}
+
+function debug() {
+  if [[ $verbose -ne 1  ]]; then
+    return 0
+  fi
+
+  echo "$1"
 }
 
 function assertGitRepo() {
     git_dir="$1"
-    git -C "$git_dir" status &> /dev/null
-    if [ $? -ne 0 ]; then
+
+    local is_git=0
+    git -C "$git_dir" status &> /dev/null || is_git=$?
+
+    if [ $is_git -ne 0 ]; then
         echo "'$1' is not in a Git repo"
         exit 1;
 fi
 }
 
+function buildAzureDevOpsUrl() {
+    local organization=$(echo "$repo_origin" | sed -r 's/.*\/(.*)\/.*\/.*$/\1/')
+    local project=$(echo "$repo_origin" | sed -r 's/.*\/.*\/(.*)\/.*$/\1/')
+    local repo=$(echo "$repo_origin" | sed -r 's/.*\/.*\/.*\/(.*)$/\1/')
+    debug "Organization: '$organization' - Project: '$project' - Repo: '$repo'"
+
+
+    history_param=
+    if [ -n "$open_history" ]; then
+        history_param="&_a=history"
+    fi
+
+    if [ -n "$repo_open_filename" ]; then
+        eval "$1='https://dev.azure.com/$organization/$project/_git/$repo?path=/$repo_open_dir_relative/$repo_open_filename&version=GB$repo_branch$history_param'"
+        return
+    fi
+
+    if [[ $repo_open_nopath -eq 1 ]]; then
+    eval "$1='https://dev.azure.com/$organization/$project/_git/$repo?version=GB$repo_branch$history_param'"
+        return
+    fi
+
+
+    eval "$1='https://dev.azure.com/$organization/$project/_git/$repo?path=/$repo_open_dir_relative&version=GB$repo_branch$history_param'"
+}
+
+function buildGitHubUrl() {
+    # https://github.com/conterra/mapapps-4-developers.git
+    # git@github.com:conterra/mapapps-4-developers.git
+    local project=$(echo "$repo_origin" | sed -r 's/.*(\/|\:)(.*)\/(.*)\.git$/\2/')
+    local repo=$(echo "$repo_origin" | sed -r 's/.*(\/|\:)(.*)\/(.*)\.git$/\3/')
+    debug "Project: '$project' - Repo: '$repo'"
+
+    history_param=
+    if [ -n "$open_history" ]; then
+        history_param="&_a=history"
+    fi
+
+    tree_or_commits_param="tree"
+    if [ -n "$open_history" ]; then
+        tree_or_commits_param="commits"
+    fi
+
+    if [ -n "$repo_open_filename" ]; then
+        eval "$1='https://github.com/$project/$repo/$tree_or_commits_param/$repo_branch/$repo_open_dir_relative/$repo_open_filename'"
+        return
+    fi
+
+    if [[ $repo_open_nopath -eq 1 ]]; then
+        eval "$1='https://github.com/$project/$repo/$tree_or_commits_param/$repo_branch'"
+        return
+    fi
+
+    eval "$1='https://github.com/$project/$repo/$tree_or_commits_param/$repo_branch/$repo_open_dir_relative'"
+
+}
+
 parse_params "$@"
 
-
-file_param=
-
-repo_open_dir=
-repo_open_file=
-repo_root_dir=
-
-
-
-# file_param="$(realpath ${args[0]})"
 file_param="${args[0]}"
 
+repo_root_dir= # absolute path to the root dir of the Git repo
+repo_open_dir= # absolute path of the directory inside the Git repo to be opened
+repo_open_dir_relative= # path of the directory inside the Git repo to be opened, relative to $repo_root_dir
+repo_open_filename= # (optional) name of the file inside "$repo_open_dir" to be opened
+repo_open_nopath=0
+
 if [ -n "$file_param" ]; then
+    if [ "$file_param" == "-" ]; then
+      read line
+      echo "$line"
+      exit 0
+    fi
     file_param="$(realpath "$file_param")"
-    if [ -f $file_param ]; then
+    if [ -f "$file_param" ]; then
         # FILE is a file
         repo_open_dir=$(dirname "$file_param")
-        repo_open_file=$(basename "$file_param")
-    elif [ -d $file_param ]; then
+        repo_open_filename=$(basename "$file_param")
+    elif [ -d "$file_param" ]; then
         # FILE is a directory
         repo_open_dir="$file_param"
     else
@@ -95,51 +151,43 @@ else
     # no FILE specified
     file_param="$PWD"
     repo_open_dir=$(realpath "$file_param")
+    repo_open_nopath=1
 fi
 
-    assertGitRepo "$repo_open_dir"
-
-
-
-echo "Repo open dir: '${repo_open_dir}'"
-echo "Repo open file: '${repo_open_file}'"
-
+assertGitRepo "$repo_open_dir"
 repo_root_dir=$(git -C "$repo_open_dir" rev-parse --show-toplevel)
-echo "Repo root path: '${repo_root_dir}'"
-
 repo_open_dir_relative=$(realpath $repo_open_dir --relative-to="$repo_root_dir")
-echo "Repo open dir (relative): '$repo_open_dir_relative'"
+repo_branch_ref=$(git -C "$repo_open_dir" symbolic-ref HEAD)
+repo_branch=$(echo "$repo_branch_ref" | sed -r 's/refs\/heads\/(.*)$/\1/')
+
+
+debug "Repo root path: '${repo_root_dir}'"
+debug "Repo open dir: '${repo_open_dir}'"
+debug "Repo open dir (relative): '$repo_open_dir_relative'"
+debug "Repo open file: '${repo_open_filename}'"
+debug "Repo open branch: '${repo_branch}'"
 
 # Find out remote origin URL
 repo_origin=$(git -C "$repo_root_dir" config --get remote.origin.url)
+debug "Repo origin: '${repo_origin}'"
 
 # Split repo origin URL into repo-specific pieces, depending on type of remote system (Azure DevOps or GitHub)
 if [[ $repo_origin == *"dev.azure.com"* ]]; then
-    organization=$(echo "$repo_origin" | sed -r 's/.*\/(.*)\/.*\/.*$/\1/')
-    project=$(echo "$repo_origin" | sed -r 's/.*\/.*\/(.*)\/.*$/\1/')
-    repo=$(echo "$repo_origin" | sed -r 's/.*\/.*\/.*\/(.*)$/\1/')
-    remote_url="https://dev.azure.com/$organization/$project/_git/$repo"
-
+    buildAzureDevOpsUrl remote_url
 elif [[ $repo_origin == *"github.com"* ]]; then
-    # https://github.com/conterra/mapapps-4-developers.git
-    # git@github.com:conterra/mapapps-4-developers.git
-    organization=$(echo "$repo_origin" | sed -r 's/.*\/(.*)\/(.*)\.git$/\1/')
-    repo=$(echo "$repo_origin" | sed -r 's/.*\/(.*)\/(.*)\.git$/\2/')
-    remote_url="https://github.com/$organization/$repo"
+    buildGitHubUrl remote_url
 else 
-    echo "It's an unknown Git type"
+    echo "'$repo_origin' is an unknown Git type. Currently only Azure DevOps and GitHub.com are supported."
     exit 1
 fi
 
-echo "Remote URL: $remote_url"
+debug "Opening remote URL $remote_url"
 
-exit 0;
+if [ -n "$print_only" ]; then
+    echo "$remote_url"
+    exit 0
+fi
 
-repodata_line=$(grep remote\ \"origin\" -A 1 .git/config | sed -e "1d")
-# organization=$(echo "$repodata_line" | sed 's/.*\/\(.*\)\/\(.*\)\/\(.*\)$/\1 - \2 - \3/')
-organization=$(echo "$repodata_line" | sed 's/.*\/\(.*\)\/\(.*\)\/\(.*\)$/\1/')
-project=$(echo "$repodata_line" | sed 's/.*\/\(.*\)\/\(.*\)\/\(.*\)$/\2/')
-repo=$(echo "$repodata_line" | sed 's/.*\/\(.*\)\/\(.*\)\/\(.*\)$/\3/')
-echo "$repodata_line"
-echo "$organization"
-xdg-open "https://dev.azure.com/"$organization"/"$project"/_git/"$repo""
+xdg-open "$remote_url" 2> /dev/null
+
+exit 0
