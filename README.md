@@ -4,7 +4,6 @@
   - [Examples](#examples)
 - [Installation](#installation)
 - [Features](#features)
-- [License](#license)
 
 The `repo` script opens the Git repository you are currently working on in **Azure Repos** or **GitHub** from the command line on Linux.
 
@@ -72,5 +71,3 @@ Available options:
 - Open history (aka 'commits') view for a file or directory
 - Open branch currently checked out
 - Print the URL that would be opened to standard out
-
-## License 
