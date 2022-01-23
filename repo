@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # If the current directory belongs to an Azure DevOps Git repository it is opened in the browser.
-# Similar to the VS Code Ǵit Lens's "Open Repository on Remote" command
+# Similar to the VS Code Git Lens's "Open Repository on Remote" command
 # TODO: 
 
 set -e
