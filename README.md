@@ -55,18 +55,16 @@ Available options:
 ~/dev/my-github-repo/$ repo -y README.md
 ```
 
-
-
 ## Installation
 
-- [Download](./releases/download/v1.0.0/repo-cli_1.0.0-1.deb) and install the DEB file to install on Debian/Ubuntu:
+- [Download](https://github.com/ctjdr/repo-cli/releases/download/1.0.0-1/repo-cli_1.0.0-1.deb) and install the DEB file to install on Debian/Ubuntu:
     ```bash
     $ dpkg --install 
     ``` 
 
     or
 
-- [Download](./releases/download/v1.0.0/repo-cli_1.0.0-1.deb) the script into a folder that is in `$PATH`.
+- [Download](https://github.com/ctjdr/repo-cli/releases/download/1.0.0-1/repo-cli_1.0.0-1.deb) the script into a folder that is in `$PATH`.
 
 ## Features
 
