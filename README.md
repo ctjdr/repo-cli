@@ -58,7 +58,7 @@ Available options:
 
 - [Download](https://github.com/ctjdr/repo-cli/releases/download/1.0.0-1/repo-cli_1.0.0-1.deb) and install the DEB file to install on Debian/Ubuntu:
     ```bash
-    $ dpkg --install 
+    $ dpkg --install repo-cli_1.0.0-1.deb
     ``` 
 
     or
